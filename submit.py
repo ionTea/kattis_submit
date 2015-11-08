@@ -165,8 +165,14 @@ def scrape_and_print(htmlDoc):
 	testcomplete = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[4]/span')
 
 	if (testcomplete[0].get("class") == "accepted" or testcomplete[0].get("class") == "rejected"):
-		tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')
-		print " Time: " + tottime[0].text
+		if (testcomplete[0].get("class") == "rejected"):
+			sys.stdout.write("\033[91m")
+			print ""
+			print  "Oh no! Your submittion resulted in a " + str(testcomplete[0].xpath("text()")[0])
+			sys.stdout.write("\033[39m")
+		else:
+			tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')
+			print " Time: " + tottime[0].text
 		return True
 	return False
 
@@ -289,16 +295,17 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 		for file in files:
 			form.add_file('sub_file[]', os.path.basename(file), open(file))
 
-	request = urllib2.Request(submission_url)
-	form.add_to_request(request)
+	# request = urllib2.Request(submission_url)
+	# form.add_to_request(request)
 	try:
-		success =  urllib2.urlopen(request).read().replace("<br />", "\n")
-		print success
-		submittionId = success.split()[4][:-1]
+		# success =  urllib2.urlopen(request).read().replace("<br />", "\n")
+		# print success
+		# submittionId = success.split()[4][:-1]
 
-		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
+		# urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
 		print "Running tests..."
-		result_url = "https://kth.kattis.com/submissions/" + submittionId
+		result_url = "https://kth.kattis.com/submissions/941469"
+		# result_url = "https://kth.kattis.com/submissions/" + submittionId
 		done = False
 		while (not done):
 			time.sleep(2)

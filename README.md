@@ -10,7 +10,7 @@ Go to: https://kth.kattis.com/help/submit and download your config file, and pla
 I recommend creating an alias for your shell by modifying your .zshrc/.bashrc file, just add something like
 alias kattis = "python ~/{PATH TO SCRIPT}"
 
-To use the script, just write kattis and the available options will be printed
+If you add the alias, just write kattis and the available options will be printed
 
 ## From Kattis original script
 ## Running the client

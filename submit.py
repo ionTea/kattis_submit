@@ -145,6 +145,7 @@ def confirm_or_die(problem, language, files, mainclass, tag):
 def scrape_and_print(htmlDoc):
 	doc = etree.HTML(htmlDoc)
 	testresults = doc.xpath('//*[@id="judge_table"]/tbody/tr[2]/td/div')
+	testcomplete = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[4]/span')
 	passedTests = 0
 	sys.stdout.write("[")
 	for test in testresults[0]:
@@ -159,10 +160,9 @@ def scrape_and_print(htmlDoc):
 			sys.stdout.write("\033[39m")
 			sys.stdout.write("O ")
 	sys.stdout.write(" | " + str(passedTests) + "/" + str(len(testresults[0])))
-	sys.stdout.write("\033[39m]")
+	sys.stdout.write("\033[39m] " + str(testcomplete[0].xpath("text()")[0]))
 	# sys.stdout.write("\n")
 	sys.stdout.flush()
-	testcomplete = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[4]/span')
 
 	if (testcomplete[0].get("class") == "accepted" or testcomplete[0].get("class") == "rejected"):
 		if (testcomplete[0].get("class") == "rejected"):

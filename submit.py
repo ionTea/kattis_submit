@@ -11,10 +11,11 @@ import urllib2
 import traceback
 from lxml import etree
 import time
+from os.path import expanduser
 
 
-
-_DEFAULT_CONFIG='/usr/local/etc/kattisrc'
+_KATTISRC_LOCATION = '/usr/local/etc/'
+_KATTISRC_FILE = '.kattisrc'
 _VERSION = 'Version: $Version: $'
 _LANGUAGE_GUESS = { '.java' : 'Java', '.c' : 'C', '.cpp' : 'C++', '.h' : 'C++', '.cc' : 'C++', '.cxx' : 'C++', '.c++' : 'C++', '.py' : 'Python', '.cs': 'C#', '.c#': 'C#', '.go': 'Go', '.m' : 'Objective-C', '.hs' : 'Haskell', '.pl' : 'Prolog', '.js': 'JavaScript', '.php': 'PHP', '.rb' : 'Ruby' }
 _GUESS_MAINCLASS  = set(['Java', 'Python'])
@@ -109,8 +110,8 @@ class MultiPartForm(object):
 
 
 _RC_HELP = \
-'''I failed to read in a config file from your home directory or from the same directory
-as this script. Please go to your Kattis installation to download a .kattisrc file.
+'''Failed to read config file from your home directory or from the script directory.
+Please go to your Kattis user page to download a .kattisrc file.
 
 The file should look something like:
 [user]
@@ -231,10 +232,10 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 	if(debug):
 		print problem, language, files, force, mainclass, tag, username, password, token, debug
 	cfg = ConfigParser.ConfigParser()
-	if os.path.exists(_DEFAULT_CONFIG):
-		cfg.read(_DEFAULT_CONFIG)
 
-	if not cfg.read([os.path.join(os.getenv('HOME'), '.kattisrc'), os.path.join(os.path.dirname(sys.argv[0]), '.kattisrc')]):
+	if not cfg.read([os.path.join(os.path.dirname(sys.argv[0]), _KATTISRC_FILE),
+					os.path.join(_KATTISRC_LOCATION, _KATTISRC_FILE),
+					os.path.join(expanduser('~'), _KATTISRC_FILE)]):
 		print _RC_HELP
 		sys.exit(1)
 

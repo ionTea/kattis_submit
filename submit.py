@@ -172,7 +172,7 @@ def scrape_and_print(htmlDoc):
 			sys.stdout.write("\033[39m")
 			print ""
 			compileroutput = doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')
-			if len(compileroutput > 0):
+			if compileroutput:
 				print "Compiler output: "
 				print compileroutput[0].text
 				print ""

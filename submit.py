@@ -170,6 +170,10 @@ def scrape_and_print(htmlDoc):
 			print ""
 			print  "Oh no! Your submission resulted in a " + str(testcomplete[0].xpath("text()")[0])
 			sys.stdout.write("\033[39m")
+			print ""
+			print "Compiler output: "
+			print doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')[0].text
+			print ""
 		else:
 			tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')
 			print " Time: " + tottime[0].text
@@ -295,19 +299,20 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 		for file in files:
 			form.add_file('sub_file[]', os.path.basename(file), open(file))
 
-	request = urllib2.Request(submission_url)
-	form.add_to_request(request)
+	# request = urllib2.Request(submission_url)
+	# form.add_to_request(request)
 	try:
-		success =  urllib2.urlopen(request).read().replace("<br />", "\n")
-		print success
-		submissionId = success.split()[4][:-1]
+		# success =  urllib2.urlopen(request).read().replace("<br />", "\n")
+		# print success
+		# submissionId = success.split()[4][:-1]
 
 		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
 		print "Running tests..."
-		result_url = "https://kth.kattis.com/submissions/" + submissionId
+		# result_url = "https://kth.kattis.com/submissions/" + submissionId
+		result_url = "https://kth.kattis.com/submissions/945456"
 		done = False
 		while (not done):
-			time.sleep(2)
+			# time.sleep(2)
 			result_html = urllib2.urlopen(result_url)
 			done = scrape_and_print(result_html.read())
 			sys.stdout.write("\r")

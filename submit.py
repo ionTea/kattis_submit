@@ -12,7 +12,7 @@ import traceback
 from lxml import etree
 import time
 from os.path import expanduser
-
+from colorama import init, deinit
 
 _KATTISRC_LOCATION = '/usr/local/etc/'
 _KATTISRC_FILE = '.kattisrc'
@@ -153,7 +153,7 @@ def scrape_and_print(htmlDoc):
 		if (test.get("class") == "accepted"):
 			passedTests += 1
 			sys.stdout.write("\033[92m")
-			sys.stdout.write(u"\u2713 ")
+			sys.stdout.write("P ")
 		elif (test.get("class") == "rejected"):
 			sys.stdout.write("\033[91m")
 			sys.stdout.write("X ")
@@ -188,6 +188,7 @@ def scrape_and_print(htmlDoc):
 
 
 def main():
+	init(convert=True)
 	opt = optparse.OptionParser()
 	opt.add_option('-p', '--problem', dest='problem', metavar='PROBLEM', help='Submit to problem PROBLEM. Overrides default guess (first part of first filename)', default=None)
 	opt.add_option('-m', '--mainclass', dest='mainclass', metavar='CLASS', help='Sets mainclass to CLASS. Overrides default guess (first part of first filename)', default=None)
@@ -227,6 +228,7 @@ def main():
 		seen.add(a)
 
 	submit(problem, language, files, opts.force, mainclass, tag, debug=debug)
+	deinit()
 
 
 
@@ -334,4 +336,4 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 		sys.exit(1)
 
 if __name__ == '__main__':
-	main()
+    main()

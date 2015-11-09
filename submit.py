@@ -299,17 +299,16 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 		for file in files:
 			form.add_file('sub_file[]', os.path.basename(file), open(file))
 
-	# request = urllib2.Request(submission_url)
-	# form.add_to_request(request)
+	request = urllib2.Request(submission_url)
+	form.add_to_request(request)
 	try:
-		# success =  urllib2.urlopen(request).read().replace("<br />", "\n")
-		# print success
-		# submissionId = success.split()[4][:-1]
+		success =  urllib2.urlopen(request).read().replace("<br />", "\n")
+		print success
+		submissionId = success.split()[4][:-1]
 
 		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
 		print "Running tests..."
-		# result_url = "https://kth.kattis.com/submissions/" + submissionId
-		result_url = "https://kth.kattis.com/submissions/945456"
+		result_url = "https://kth.kattis.com/submissions/" + submissionId
 		done = False
 		while (not done):
 			# time.sleep(2)

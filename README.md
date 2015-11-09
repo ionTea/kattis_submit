@@ -6,6 +6,8 @@ I modified the script, so you now get the result of a submission directly in the
 The program output is not optimized for Windows atm.
 
 # Setup
+Make sure that you have python 2.7 installed, as well as pip. I also rely on a library called lxml, that is used to parse the HTML. Some people have had truble installing this package (OSX). See issue#4.
+
 Download this script to your home folder, or wherever you want it to be.
 Go to: https://kth.kattis.com/help/submit and download your config file, and place it in the same folder as the script.
 
@@ -13,6 +15,7 @@ I recommend creating an alias for your shell by modifying your .zshrc/.bashrc fi
 alias kattis = "python ~/{PATH TO SCRIPT}"
 
 If you add the alias, just write kattis and the available options will be printed
+
 
 ## From Kattis original script
 ## Running the client

@@ -171,9 +171,11 @@ def scrape_and_print(htmlDoc):
 			print  "Oh no! Your submission resulted in a " + str(testcomplete[0].xpath("text()")[0])
 			sys.stdout.write("\033[39m")
 			print ""
-			print "Compiler output: "
-			print doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')[0].text
-			print ""
+			compileroutput = doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')
+			if len(compileroutput > 0):
+				print "Compiler output: "
+				print compileroutput[0].text
+				print ""
 		else:
 			tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')
 			print " Time: " + tottime[0].text

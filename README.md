@@ -3,6 +3,8 @@ A simple python script that submits files to Kattis
 The original version of this script can be found at https://kth.kattis.com/help/submit
 I modified the script, so you now get the result of a submission directly in the terminal.
 
+The program output is not optimized for Windows atm.
+
 # Setup
 Download this script to your home folder, or wherever you want it to be.
 Go to: https://kth.kattis.com/help/submit and download your config file, and place it in the same folder as the script.

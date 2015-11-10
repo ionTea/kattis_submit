@@ -322,10 +322,10 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 		result_url = "https://kth.kattis.com/submissions/" + submissionId
 		done = False
 		while (not done):
-			# time.sleep(2)
 			result_html = urllib2.urlopen(result_url)
 			done = scrape_and_print(result_html.read())
 			sys.stdout.write("\r")
+			time.sleep(1)
 		print "For more info visit " + result_url
 	except urllib2.URLError, e:
 		if hasattr(e, 'reason'):

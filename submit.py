@@ -3,12 +3,8 @@ import ConfigParser
 import optparse
 import os
 import sys
-import itertools
-import mimetools
+import requests
 import mimetypes
-import urllib
-import urllib2
-import traceback
 from lxml import etree
 import time
 from os.path import expanduser
@@ -26,95 +22,6 @@ if os.name == "nt":
 _LANGUAGE_GUESS = { '.java' : 'Java', '.c' : 'C', '.cpp' : 'C++', '.h' : 'C++', '.cc' : 'C++', '.cxx' : 'C++', '.c++' : 'C++', '.py' : 'Python', '.cs': 'C#', '.c#': 'C#', '.go': 'Go', '.m' : 'Objective-C', '.hs' : 'Haskell', '.pl' : 'Prolog', '.js': 'JavaScript', '.php': 'PHP', '.rb' : 'Ruby' }
 _GUESS_MAINCLASS  = set(['Java', 'Python'])
 
-"""MultiPartForm based on code from
-http://blog.doughellmann.com/2009/07/pymotw-urllib2-library-for-opening-urls.html
-
-This since the default libraries still lack support for posting
-multipart/form-data (which is required to post files in HTTP).
-http://bugs.python.org/issue3244
-"""
-class MultiPartForm(object):
-	"""Accumulate the data to be used when posting a form."""
-
-	def __init__(self):
-		self.form_fields = []
-		self.files = []
-		self.boundary = mimetools.choose_boundary()
-		return
-
-	def get_content_type(self):
-		return 'multipart/form-data; boundary=%s' % self.boundary
-
-	def escape_field_name(self, name):
-		"""Should escape a field name escaped following RFC 2047 if needed.
-		Skipped for now as we only call it with hard coded constants.
-		"""
-		return name
-
-	def add_field(self, name, value):
-		"""Add a simple field to the form data."""
-		if(value==None):
-			#Assume the field is empty
-			value=""
-		#ensure value is a string
-		value=str(value)
-		self.form_fields.append((name, value))
-		return
-
-	def add_file(self, fieldname, filename, fileHandle, mimetype=None):
-		"""Add a file to be uploaded."""
-		body = fileHandle.read()
-		if mimetype is None:
-			mimetype = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
-		self.files.append((fieldname, filename, mimetype, body))
-		return
-
-	def add_to_request(self, request):
-		body = str(self)
-		request.add_header('Content-type', self.get_content_type())
-		request.add_header('Content-length', len(body))
-		request.add_data(body)
-
-	def __str__(self):
-		"""Return a string representing the form data, including attached files."""
-		# Build a list of lists, each containing "lines" of the
-		# request.  Each part is separated by a boundary string.
-		# Once the list is built, return a string where each
-		# line is separated by '\r\n'.
-		parts = []
-		part_boundary = '--' + self.boundary
-
-		# Add the form fields
-		parts.extend(
-			[ part_boundary,
-			  'Content-Disposition: form-data; name="%s"' % self.escape_field_name(name),
-			  '',
-			  value,
-			]
-			for name, value in self.form_fields
-			)
-
-		# Add the files to upload
-		parts.extend(
-			[ part_boundary,
-			  'Content-Disposition: file; name="%s"; filename="%s"' % \
-				  (self.escape_field_name(field_name), filename),
-				  # FIXME: filename should be escaped using RFC 2231
-			  'Content-Type: %s' % content_type,
-			  '',
-			  body,
-			]
-			for field_name, filename, content_type, body in self.files
-			)
-
-		# Flatten the list and add closing boundary marker,
-		# then return CR+LF separated data
-		flattened = list(itertools.chain(*parts))
-		flattened.append('--' + self.boundary + '--')
-		flattened.append('')
-		return '\r\n'.join(flattened)
-
-
 _RC_HELP = \
 '''Failed to read config file from your home directory or from the script directory.
 Please go to your Kattis user page to download a .kattisrc file.
@@ -127,8 +34,8 @@ token: *********
 [kattis]
 loginurl: https://<kattis>/login
 submissionurl: https://<kattis>/submit
+resulturl: https://<kattis>/submissions/
 '''
-
 
 def get_url(cfg, option, default):
 	if cfg.has_option('kattis', option):
@@ -189,13 +96,10 @@ def scrape_and_print(htmlDoc):
 		return True
 	return False
 
-
-
-
-
 def main():
 	if os.name == "nt":
 		init(convert=True)
+
 	opt = optparse.OptionParser()
 	opt.add_option('-p', '--problem', dest='problem', metavar='PROBLEM', help='Submit to problem PROBLEM. Overrides default guess (first part of first filename)', default=None)
 	opt.add_option('-m', '--mainclass', dest='mainclass', metavar='CLASS', help='Sets mainclass to CLASS. Overrides default guess (first part of first filename)', default=None)
@@ -206,15 +110,17 @@ def main():
 
 	opts, args = opt.parse_args()
 
-	if len(args) == 0:
+	if not args: # No args, nothing to upload.
 		opt.print_help()
 		sys.exit(1)
+
+	files = list(set(args))
 
 	problem, ext = os.path.splitext(os.path.basename(args[0]))
 	language = _LANGUAGE_GUESS.get(ext, None)
 	mainclass = problem if language in _GUESS_MAINCLASS else None
-	tag=opts.tag
-	debug=opts.debug
+	tag = opts.tag
+	debug = opts.debug
 
 	if opts.problem:
 		problem = opts.problem
@@ -227,127 +133,110 @@ def main():
 		print 'No language specified, and I failed to guess language from filename extension "%s"' % (ext)
 		sys.exit(1)
 
-	seen = set()
-	files = []
-	for a in args:
-		if a not in seen:
-			files.append(a)
-		seen.add(a)
-
-	submit(problem, language, files, opts.force, mainclass, tag, debug=debug)
-	if os.name == "nt":
-		deinit()
-
-
-
-def submit(problem, language, files, force=True, mainclass=None, tag=None, username=None, password=None, token=None, debug=False):
-	if(debug):
-		print problem, language, files, force, mainclass, tag, username, password, token, debug
 	cfg = ConfigParser.ConfigParser()
-
 	if not cfg.read([os.path.join(os.path.dirname(sys.argv[0]), _KATTISRC_FILE),
 					os.path.join(_KATTISRC_LOCATION, _KATTISRC_FILE),
 					os.path.join(expanduser('~'), _KATTISRC_FILE)]):
 		print _RC_HELP
 		sys.exit(1)
 
-	if(username==None):
-		username = cfg.get('user', 'username')
-	if(password==None):
-		try:
-			password = cfg.get('user', 'password')
-		except:
-			pass
-	if(token==None):
-		try:
-			token = cfg.get('user', 'token')
-		except:
-			pass
-	if(mainclass==None):
-		mainclass=""
-	if(tag==None):
-		tag=""
+	if cfg.has_option('user', 'username'):
+		user = cfg.get('user', 'username')
+	else:
+		print "Your .kattisrc file apperars corrupted. It must provide a username.\nPlease download a new .kattisrc file\n"
 
-	if password == None and token == None:
+	if cfg.has_option('user', 'token'):
+		token = cfg.get('user', 'token')
+		method = 'token'
+	elif cfg.has_option('user', 'password'):
+		token = cfg.get('user', 'password')
+		method = 'password'
+	else:
 		print "Your .kattisrc file appears corrupted. It must provide a token (or a KATTIS password).\nPlease download a new .kattisrc file\n"
 		sys.exit(1)
 
-	opener = urllib2.build_opener(urllib2.HTTPCookieProcessor())
-	urllib2.install_opener(opener)
-	loginurl = get_url(cfg, 'loginurl', 'login')
-	loginargs = { 'user' : username, 'script' : 'true' }
-	if password:
-		loginargs['password'] = password
-	if token:
-		loginargs['token'] = token
-	try:
-		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
-	except urllib2.URLError, e:
-		if hasattr(e, 'reason'):
-			print 'Failed to connect to Kattis server.'
-			print 'Reason: ', e.reason
-		elif hasattr(e, 'code'):
-			print 'Login failed.'
-			if(e.code==403):
-				print "Incorrect Username/Password"
-			elif(e.code==404):
-				print "Incorrect login URL (404)"
-			else:
-				print 'Error code: ', e.code
-		sys.exit(1)
+	with requests.Session() as session:
+		loginurl = get_url(cfg, 'loginurl', 'login')
+		if login(session, loginurl, user, method, token, debug=debug):
+			submissionurl = get_url(cfg, 'submissionurl', 'judge_upload')
+			submission_id = submit(session, submissionurl, problem, language, files, opts.force, mainclass, tag, debug=debug)
+			if login(session, loginurl, user, method, token, debug=debug) and submission_id:
+				# Second login required becuase server loggs out user after submisison.
+				resulturl = get_url(cfg, 'resulturl', 'submissions')
+				watch(session, resulturl, submission_id, debug=debug)
+
+	if os.name == "nt":
+		deinit()
+
+def login(session, loginurl, username, method, token, debug=False):
+	login = session.post(loginurl, data={'user': username, method: token, 'script': 'true'})
+	if debug:
+		print "Login headers"
+		print login.request.headers
+		print login.headers
+	if not login.ok:
+		if login.status_code == 403:
+			print "Incorrect Username/Password (403)"
+		elif login.status_code == 404:
+			print "Incorrect login URL (404)"
+		else:
+			print 'Unknown error on login:', login.status_code, login.reason
+		return False
+	return True
+
+
+def submit(session, submissionurl, problem, language, files, force=True, mainclass=None, tag=None, debug=False):
+	if debug:
+		print problem, language, files, force, mainclass, tag, debug
+
 	if not force:
 		confirm_or_die(problem, language, files, mainclass, tag)
 
-	submission_url = get_url(cfg, 'submissionurl', 'judge_upload')
-	form = MultiPartForm()
-	form.add_field('submit', 'true')
-	form.add_field('submit_ctr', '2')
-	form.add_field('language', language)
-	form.add_field('mainclass', mainclass)
-	form.add_field('problem', problem)
-	form.add_field('tag', tag)
-	form.add_field('script', 'true')
+	submission = session.post(submissionurl,
+		data={
+			'submit': 'true',
+			'submit_ctr': '2',
+			'language': language,
+			'mainclass': mainclass,
+			'problem': problem,
+			'tag': tag,
+			'script': 'true'
+		},
+		files=[('sub_file[]', (filename, open(filename, 'rb'), mimetypes.guess_type(filename)[0] or 'application/octet-stream')) for filename in files] # Lets make this line longer.
+		)
 
-	try:
-		if(len(files)>0):
-			for file in files:
-				form.add_file('sub_file[]', os.path.basename(file), open(file))
-	except IOError, e:
-		sys.stdout.write("File not found.\n")
-		sys.exit(1)
+	if debug:
+		print "Submission headers"
+		print submission.request.headers
+		print submission.headers
 
-	request = urllib2.Request(submission_url)
-	form.add_to_request(request)
-	try:
-		success =  urllib2.urlopen(request).read().replace("<br />", "\n")
+	if submission.ok:
+		success = submission.text.replace("<br />", "\n")
 		print success
-		submissionId = success.split()[4][:-1]
+		submission_id = success.split()[4][:-1]
+		return submission_id
+	else:
+		print "Unknown error on submission:", submission.status_code, submission.reason
+		return False
 
-		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
-		print "Running tests..."
-		result_url = "https://kth.kattis.com/submissions/" + submissionId
-		done = False
-		while (not done):
-			result_html = urllib2.urlopen(result_url)
-			done = scrape_and_print(result_html.read())
-			sys.stdout.write("\r")
-			time.sleep(1)
-		print "For more info visit " + result_url
-	except IndexError, e:
-		sys.stdout.write("")
-	except urllib2.URLError, e:
-		if hasattr(e, 'reason'):
-			print 'Failed to connect to Kattis server.'
-			print 'Reason: ', e.reason
-		elif hasattr(e, 'code'):
-			print 'Login failed.'
-			if(e.code==403):
-				print "Access denied."
-			elif(e.code==404):
-				print "Incorrect submit URL (404)"
-			else:
-				print 'Error code: ', e.code
-		sys.exit(1)
+def watch(session, resulturl, submission_id, debug=False):
+	done = False
+	resulturl = "%s/%s" % (resulturl, submission_id)
+	print "Running tests..."
+	while not done:
+		result = session.get(resulturl)
+		if debug:
+			print "Result url:", resulturl
+			print "Result headers"
+			print result.request.headers
+			print result.headers
+		if not result.ok:
+			print "Unknown error on results:", result.status_code, result.reason
+			return
+
+		done = scrape_and_print(result.text)
+		sys.stdout.write("\r")
+		time.sleep(1)
 
 if __name__ == '__main__':
-    main()
+	main()

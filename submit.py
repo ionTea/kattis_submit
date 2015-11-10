@@ -179,7 +179,7 @@ def scrape_and_print(htmlDoc):
 			compileroutput = doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')
 			if compileroutput:
 				print "Compiler output: "
-				print compileroutput[0].text
+				print compileroutput[0].text.replace("error:","\033[91merror:\033[39m").replace("warning:", "\033[33merror:\033[39m")
 				print ""
 		else:
 			tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')

@@ -213,8 +213,10 @@ def submit(session, submissionurl, problem, language, files, force=True, maincla
 	if submission.ok:
 		success = submission.text.replace("<br />", "\n")
 		print success
-		submission_id = success.split()[4][:-1]
-		return submission_id
+		if success.find("ID") != -1: # Make sure there is a submission id.
+			return success.split()[4][:-1]
+		else:
+			return False
 	else:
 		print "Unknown error on submission:", submission.status_code, submission.reason
 		return False

@@ -16,6 +16,10 @@ from colorama import init, deinit
 
 _KATTISRC_LOCATION = '/usr/local/etc/'
 _KATTISRC_FILE = '.kattisrc'
+_PASSED_TEST_SIGN = u"\u2713"
+if os.name == "nt":
+	_PASSED_TEST_SIGN = "P"
+_DEFAULT_CONFIG='/usr/local/etc/kattisrc'
 _VERSION = 'Version: $Version: $'
 _LANGUAGE_GUESS = { '.java' : 'Java', '.c' : 'C', '.cpp' : 'C++', '.h' : 'C++', '.cc' : 'C++', '.cxx' : 'C++', '.c++' : 'C++', '.py' : 'Python', '.cs': 'C#', '.c#': 'C#', '.go': 'Go', '.m' : 'Objective-C', '.hs' : 'Haskell', '.pl' : 'Prolog', '.js': 'JavaScript', '.php': 'PHP', '.rb' : 'Ruby' }
 _GUESS_MAINCLASS  = set(['Java', 'Python'])
@@ -153,7 +157,7 @@ def scrape_and_print(htmlDoc):
 		if (test.get("class") == "accepted"):
 			passedTests += 1
 			sys.stdout.write("\033[92m")
-			sys.stdout.write("P ")
+			sys.stdout.write(_PASSED_TEST_SIGN + " ")
 		elif (test.get("class") == "rejected"):
 			sys.stdout.write("\033[91m")
 			sys.stdout.write("X ")
@@ -188,7 +192,8 @@ def scrape_and_print(htmlDoc):
 
 
 def main():
-	init(convert=True)
+	if os.name == "nt":
+		init(convert=True)
 	opt = optparse.OptionParser()
 	opt.add_option('-p', '--problem', dest='problem', metavar='PROBLEM', help='Submit to problem PROBLEM. Overrides default guess (first part of first filename)', default=None)
 	opt.add_option('-m', '--mainclass', dest='mainclass', metavar='CLASS', help='Sets mainclass to CLASS. Overrides default guess (first part of first filename)', default=None)
@@ -228,7 +233,8 @@ def main():
 		seen.add(a)
 
 	submit(problem, language, files, opts.force, mainclass, tag, debug=debug)
-	deinit()
+	if os.name == "nt":
+		deinit()
 
 
 

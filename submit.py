@@ -40,8 +40,11 @@ resulturl: https://<kattis>/submissions/
 def get_url(cfg, option, default):
 	if cfg.has_option('kattis', option):
 		return cfg.get('kattis', option)
-	else:
+	elif cfg.has_option('kattis', 'hostname'):
 		return 'https://%s/%s' % (cfg.get('kattis', 'hostname'), default)
+	else:
+		print "Your .kattisrc file is missing a url."
+		sys.exit(1)
 
 def confirm_or_die(problem, language, files, mainclass, tag):
 	print 'Problem:', problem

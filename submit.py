@@ -14,13 +14,15 @@ import time
 from os.path import expanduser
 from colorama import init, deinit
 
+_VERSION = 'Version: $Version: $'
+
 _KATTISRC_LOCATION = '/usr/local/etc/'
 _KATTISRC_FILE = '.kattisrc'
 _PASSED_TEST_SIGN = u"\u2713"
+
 if os.name == "nt":
 	_PASSED_TEST_SIGN = "P"
-_DEFAULT_CONFIG='/usr/local/etc/kattisrc'
-_VERSION = 'Version: $Version: $'
+
 _LANGUAGE_GUESS = { '.java' : 'Java', '.c' : 'C', '.cpp' : 'C++', '.h' : 'C++', '.cc' : 'C++', '.cxx' : 'C++', '.c++' : 'C++', '.py' : 'Python', '.cs': 'C#', '.c#': 'C#', '.go': 'Go', '.m' : 'Objective-C', '.hs' : 'Haskell', '.pl' : 'Prolog', '.js': 'JavaScript', '.php': 'PHP', '.rb' : 'Ruby' }
 _GUESS_MAINCLASS  = set(['Java', 'Python'])
 
@@ -306,9 +308,13 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 	form.add_field('tag', tag)
 	form.add_field('script', 'true')
 
-	if(len(files)>0):
-		for file in files:
-			form.add_file('sub_file[]', os.path.basename(file), open(file))
+	try:
+		if(len(files)>0):
+			for file in files:
+				form.add_file('sub_file[]', os.path.basename(file), open(file))
+	except IOError, e:
+		sys.stdout.write("File not found.\n")
+		sys.exit(1)
 
 	request = urllib2.Request(submission_url)
 	form.add_to_request(request)
@@ -327,6 +333,8 @@ def submit(problem, language, files, force=True, mainclass=None, tag=None, usern
 			sys.stdout.write("\r")
 			time.sleep(1)
 		print "For more info visit " + result_url
+	except IndexError, e:
+		sys.stdout.write("")
 	except urllib2.URLError, e:
 		if hasattr(e, 'reason'):
 			print 'Failed to connect to Kattis server.'

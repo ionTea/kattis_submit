@@ -1,6 +1,6 @@
 # kattis_submit
 A simple python script that submits files to Kattis.
-The original version of this script can be found at https://kth.kattis.com/help/submit
+The original version of this script can be found at https://kth.kattis.com/help/submit.
 I modified the script, so you now get the result of a submission directly in the terminal.
 
 ## Setup
@@ -10,7 +10,7 @@ Dependencies are python 2.7 with the modules colorama and lxml. Easily installed
 
 There can arise problems when installing lxml under OSX, see issue#4.
 
-To use this script you need to download a kattisrc config file which can be found at: https://kth.kattis.com/help/submit
+To use this script you need to download a kattisrc config file which can be found at https://kth.kattis.com/download/kattisrc.
 It can be placed in your user folder or the folder where the script resides.
 
 I recommend creating an alias for your shell by modifying your .zshrc/.bashrc file, just add something like

@@ -7,7 +7,7 @@ import requests
 import mimetypes
 from lxml import etree
 import time
-from os.path import expanduser
+from os.path import expanduser, exists
 from colorama import init, deinit
 
 _VERSION = 'Version: $Version: $'
@@ -117,7 +117,15 @@ def main():
 		opt.print_help()
 		sys.exit(1)
 
-	files = list(set(args))
+	seen = set()
+	files = []
+	for a in args:
+		if not os.path.exists(a):
+			print 'File not found:', a
+			sys.exit(1)
+		if a not in seen:
+			files.append(a)
+		seen.add(a)
 
 	problem, ext = os.path.splitext(os.path.basename(args[0]))
 	language = _LANGUAGE_GUESS.get(ext, None)

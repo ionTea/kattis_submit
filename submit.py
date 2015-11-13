@@ -5,7 +5,7 @@ import os
 import sys
 import requests
 import mimetypes
-from lxml import etree
+from bs4 import BeautifulSoup
 import time
 from os.path import expanduser, exists
 from colorama import init, deinit
@@ -60,42 +60,42 @@ def confirm_or_die(problem, language, files, mainclass, tag):
 		sys.exit(1)
 
 def scrape_and_print(htmlDoc):
-	doc = etree.HTML(htmlDoc)
-	testresults = doc.xpath('//*[@id="judge_table"]/tbody/tr[2]/td/div')
-	testcomplete = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[4]/span')
-	passedTests = 0
-	sys.stdout.write("[")
-	for test in testresults[0]:
-		if (test.get("class") == "accepted"):
-			passedTests += 1
-			sys.stdout.write("\033[92m")
-			sys.stdout.write(_PASSED_TEST_SIGN + " ")
-		elif (test.get("class") == "rejected"):
-			sys.stdout.write("\033[91m")
-			sys.stdout.write("X ")
-		else:
-			sys.stdout.write("\033[39m")
-			sys.stdout.write("O ")
-	sys.stdout.write(" | " + str(passedTests) + "/" + str(len(testresults[0])))
-	sys.stdout.write("\033[39m] " + str(testcomplete[0].xpath("text()")[0]))
-	# sys.stdout.write("\n")
+	soup  = BeautifulSoup(htmlDoc)
+	table = soup.find(id="judge_table").tbody
+
+	num_tests    = len(table.div)
+	num_accepted = len(table.div("span", "accepted"))
+	num_failed   = len(table.div("span", "rejected"))
+
+	status  = table.find("td", "status")
+	runtime = table.find("td", "runtime")
+
+	status_class = status.get("class")
+	status_colored = status.text
+	if "accepted" in status_class:
+		status_colored = "\033[92m{}\033[39m".format(status_colored)
+	elif "rejected" in status_class:
+		status_colored = "\033[91m{}\033[39m".format(status_colored)
+
+	sys.stdout.write(
+		u"\r[ \033[92m{accepted}\033[91m{failed}\033[39m] | {}/{} | {}".format(
+			num_accepted,
+			num_tests,
+			status_colored,
+			accepted=u"\u2713 "*num_accepted,
+			failed="X "*num_failed
+		)
+	)
 	sys.stdout.flush()
 
-	if (testcomplete[0].get("class") == "accepted" or testcomplete[0].get("class") == "rejected"):
-		if (testcomplete[0].get("class") == "rejected"):
-			sys.stdout.write("\033[91m")
-			print ""
-			print  "Oh no! Your submission resulted in a " + str(testcomplete[0].xpath("text()")[0])
-			sys.stdout.write("\033[39m")
-			print ""
-			compileroutput = doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')
-			if compileroutput:
-				print "Compiler output: "
-				print compileroutput[0].text
-				print ""
-		else:
-			tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')
-			print " Time: " + tottime[0].text
+	if "accepted" in status_class:
+		print "\nTime:", runtime.text
+		return True
+	elif "rejected" in status_class:
+		print "\nOh no! Your submission resulted in a", status_colored
+		for info in soup.find_all("div", "extrainfo"):
+			print info.h3.text + ":"
+			print info.pre.text.replace("error:","\033[91merror:\033[39m").replace("warning:", "\033[33merror:\033[39m")
 		return True
 	return False
 

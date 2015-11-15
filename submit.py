@@ -7,8 +7,9 @@ import requests
 import mimetypes
 from bs4 import BeautifulSoup
 import time
+import re
 from os.path import expanduser, exists
-from colorama import init, deinit
+from colorama import init, deinit, Fore
 
 _VERSION = 'Version: $Version: $'
 
@@ -73,17 +74,20 @@ def scrape_and_print(htmlDoc):
 	status_class = status.get("class")
 	status_colored = status.text
 	if "accepted" in status_class:
-		status_colored = "\033[92m{}\033[39m".format(status_colored)
+		status_colored = Fore.GREEN + status_colored + Fore.RESET
 	elif "rejected" in status_class:
-		status_colored = "\033[91m{}\033[39m".format(status_colored)
+		status_colored = Fore.RED + status_colored + Fore.RESET
 
 	sys.stdout.write(
-		u"\r[ \033[92m{accepted}\033[91m{failed}\033[39m] | {}/{} | {}".format(
+		u"\r[ {}{}{}{}{}] | {}/{} | {}".format(
+			Fore.GREEN,
+			u"\u2713 "*num_accepted,
+			Fore.RED,
+			"X "*num_failed,
+			Fore.RESET,
 			num_accepted,
 			num_tests,
 			status_colored,
-			accepted=u"\u2713 "*num_accepted,
-			failed="X "*num_failed
 		)
 	)
 	sys.stdout.flush()
@@ -95,7 +99,7 @@ def scrape_and_print(htmlDoc):
 		print "\nOh no! Your submission resulted in a", status_colored
 		for info in soup.find_all("div", "extrainfo"):
 			print info.h3.text + ":"
-			print info.pre.text.replace("error:","\033[91merror:\033[39m").replace("warning:", "\033[33merror:\033[39m")
+			print re.sub("(Error|error|Warning|warning)", lambda match: Fore.RED + match.group(1) + Fore.RESET, info.pre.text)
 		return True
 	return False
 

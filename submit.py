@@ -2,13 +2,13 @@
 import ConfigParser
 import optparse
 import os
+import os.path
 import sys
 import requests
 import mimetypes
-from bs4 import BeautifulSoup
-import time
 import re
-from os.path import expanduser, exists
+import time
+from bs4 import BeautifulSoup
 from colorama import init, deinit, Fore
 
 _VERSION = 'Version: $Version: $'
@@ -38,14 +38,21 @@ submissionurl: https://<kattis>/submit
 resulturl: https://<kattis>/submissions/
 '''
 
-def get_url(cfg, option, default):
-	if cfg.has_option('kattis', option):
-		return cfg.get('kattis', option)
-	elif cfg.has_option('kattis', 'hostname'):
-		return 'https://%s/%s' % (cfg.get('kattis', 'hostname'), default)
-	else:
-		print "Your .kattisrc file is missing a url."
-		sys.exit(1)
+def login(session, loginurl, username, method, token, debug=False):
+	login = session.post(loginurl, data={'user': username, method: token, 'script': 'true'})
+	if debug:
+		print "Login headers"
+		print login.request.headers
+		print login.headers
+	if not login.ok:
+		if login.status_code == 403:
+			print "Incorrect Username/Password (403)"
+		elif login.status_code == 404:
+			print "Incorrect login URL (404)"
+		else:
+			print 'Unknown error on login:', login.status_code, login.reason
+		return False
+	return True
 
 def confirm_or_die(problem, language, files, mainclass, tag):
 	print 'Problem:', problem
@@ -59,6 +66,45 @@ def confirm_or_die(problem, language, files, mainclass, tag):
 	if sys.stdin.readline().upper()[:-1] != 'Y':
 		print 'Cancelling'
 		sys.exit(1)
+
+def guess_mime(filename):
+	return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+
+def submit(session, submissionurl, problem, language, files, force=True, mainclass=None, tag=None, debug=False):
+	if debug:
+		print problem, language, files, force, mainclass, tag, debug
+
+	if not force:
+		confirm_or_die(problem, language, files, mainclass, tag)
+
+	submission = session.post(submissionurl,
+		data={
+			'submit': 'true',
+			'submit_ctr': '2',
+			'language': language,
+			'mainclass': mainclass,
+			'problem': problem,
+			'tag': tag,
+			'script': 'true'
+		},
+		files=[('sub_file[]', (filename, open(filename, 'rb'), guess_mime(filename))) for filename in files]
+		)
+
+	if debug:
+		print "Submission headers"
+		print submission.request.headers
+		print submission.headers
+
+	if submission.ok:
+		result = submission.text.replace("<br />", "\n")
+		print result
+		if result.find("ID") != -1: # Make sure there is a submission id.
+			return result.split()[4][:-1]
+		else:
+			return False
+	else:
+		print "Unknown error on submission:", submission.status_code, submission.reason
+		return False
 
 def scrape_and_print(htmlDoc):
 	soup  = BeautifulSoup(htmlDoc)
@@ -102,6 +148,33 @@ def scrape_and_print(htmlDoc):
 			print re.sub("(Error|error|Warning|warning)", lambda match: Fore.RED + match.group(1) + Fore.RESET, info.pre.text)
 		return True
 	return False
+
+def watch(session, resulturl, submission_id, debug=False):
+	done = False
+	resulturl = "%s/%s" % (resulturl, submission_id)
+	print "Running tests..."
+	while not done:
+		result = session.get(resulturl)
+		if debug:
+			print "Result url:", resulturl
+			print "Result headers"
+			print result.request.headers
+			print result.headers
+		if not result.ok:
+			print "Unknown error on results:", result.status_code, result.reason
+			return
+
+		done = scrape_and_print(result.text)
+		time.sleep(1)
+
+def get_url(cfg, option, default):
+	if cfg.has_option('kattis', option):
+		return cfg.get('kattis', option)
+	elif cfg.has_option('kattis', 'hostname'):
+		return 'https://%s/%s' % (cfg.get('kattis', 'hostname'), default)
+	else:
+		print "Your .kattisrc file is missing a url."
+		sys.exit(1)
 
 def main():
 	if os.name == "nt":
@@ -151,7 +224,7 @@ def main():
 	cfg = ConfigParser.ConfigParser()
 	if not cfg.read([os.path.join(os.path.dirname(sys.argv[0]), _KATTISRC_FILE),
 					os.path.join(_KATTISRC_LOCATION, _KATTISRC_FILE),
-					os.path.join(expanduser('~'), _KATTISRC_FILE)]):
+					os.path.join(os.path.expanduser('~'), _KATTISRC_FILE)]):
 		print _RC_HELP
 		sys.exit(1)
 
@@ -175,85 +248,13 @@ def main():
 		if login(session, loginurl, user, method, token, debug=debug):
 			submissionurl = get_url(cfg, 'submissionurl', 'judge_upload')
 			submission_id = submit(session, submissionurl, problem, language, files, opts.force, mainclass, tag, debug=debug)
-			if login(session, loginurl, user, method, token, debug=debug) and submission_id:
-				# Second login required becuase server loggs out user after submisison.
+			if submission_id and login(session, loginurl, user, method, token, debug=debug):
+				# Second login required becuase server logs out user after submisison.
 				resulturl = get_url(cfg, 'resulturl', 'submissions')
 				watch(session, resulturl, submission_id, debug=debug)
 
 	if os.name == "nt":
 		deinit()
-
-def login(session, loginurl, username, method, token, debug=False):
-	login = session.post(loginurl, data={'user': username, method: token, 'script': 'true'})
-	if debug:
-		print "Login headers"
-		print login.request.headers
-		print login.headers
-	if not login.ok:
-		if login.status_code == 403:
-			print "Incorrect Username/Password (403)"
-		elif login.status_code == 404:
-			print "Incorrect login URL (404)"
-		else:
-			print 'Unknown error on login:', login.status_code, login.reason
-		return False
-	return True
-
-
-def submit(session, submissionurl, problem, language, files, force=True, mainclass=None, tag=None, debug=False):
-	if debug:
-		print problem, language, files, force, mainclass, tag, debug
-
-	if not force:
-		confirm_or_die(problem, language, files, mainclass, tag)
-
-	submission = session.post(submissionurl,
-		data={
-			'submit': 'true',
-			'submit_ctr': '2',
-			'language': language,
-			'mainclass': mainclass,
-			'problem': problem,
-			'tag': tag,
-			'script': 'true'
-		},
-		files=[('sub_file[]', (filename, open(filename, 'rb'), mimetypes.guess_type(filename)[0] or 'application/octet-stream')) for filename in files] # Lets make this line longer.
-		)
-
-	if debug:
-		print "Submission headers"
-		print submission.request.headers
-		print submission.headers
-
-	if submission.ok:
-		success = submission.text.replace("<br />", "\n")
-		print success
-		if success.find("ID") != -1: # Make sure there is a submission id.
-			return success.split()[4][:-1]
-		else:
-			return False
-	else:
-		print "Unknown error on submission:", submission.status_code, submission.reason
-		return False
-
-def watch(session, resulturl, submission_id, debug=False):
-	done = False
-	resulturl = "%s/%s" % (resulturl, submission_id)
-	print "Running tests..."
-	while not done:
-		result = session.get(resulturl)
-		if debug:
-			print "Result url:", resulturl
-			print "Result headers"
-			print result.request.headers
-			print result.headers
-		if not result.ok:
-			print "Unknown error on results:", result.status_code, result.reason
-			return
-
-		done = scrape_and_print(result.text)
-		sys.stdout.write("\r")
-		time.sleep(1)
 
 if __name__ == '__main__':
 	main()

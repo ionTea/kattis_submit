@@ -99,7 +99,7 @@ def submit(session, submissionurl, problem, language, files, force=True, maincla
 		result = submission.text.replace("<br />", "\n")
 		print result
 		if result.find("ID") != -1: # Make sure there is a submission id.
-			return result.split()[4][:-1]
+			return result.split()[4][:-3]
 		else:
 			return False
 	else:
@@ -107,7 +107,7 @@ def submit(session, submissionurl, problem, language, files, force=True, maincla
 		return False
 
 def scrape_and_print(htmlDoc):
-	soup  = BeautifulSoup(htmlDoc)
+	soup  = BeautifulSoup(htmlDoc, 'html.parser')
 	table = soup.find(id="judge_table").tbody
 
 	num_tests    = len(table.div)
@@ -125,11 +125,11 @@ def scrape_and_print(htmlDoc):
 		status_colored = Fore.RED + status_colored + Fore.RESET
 
 	sys.stdout.write(
-		u"\r[ {}{}{}{}{}] | {}/{} | {}".format(
+		u"\r[{}{}{}{}{}] | {}/{} | {}".format(
 			Fore.GREEN,
-			u"\u2713 "*num_accepted,
+			u"\u2713"*num_accepted,
 			Fore.RED,
-			"X "*num_failed,
+			"X"*num_failed,
 			Fore.RESET,
 			num_accepted,
 			num_tests,
@@ -152,7 +152,7 @@ def scrape_and_print(htmlDoc):
 def watch(session, resulturl, submission_id, debug=False):
 	done = False
 	resulturl = "%s/%s" % (resulturl, submission_id)
-	print "Running tests..."
+	print "Running tests...", resulturl
 	while not done:
 		result = session.get(resulturl)
 		if debug:

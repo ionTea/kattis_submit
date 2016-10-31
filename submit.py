@@ -99,7 +99,7 @@ def submit(session, submissionurl, problem, language, files, force=True, maincla
 		result = submission.text.replace("<br />", "\n")
 		print result
 		if result.find("ID") != -1: # Make sure there is a submission id.
-			return result.split()[4][:-3]
+			return result.split()[4][:-1]
 		else:
 			return False
 	else:

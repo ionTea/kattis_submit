@@ -168,6 +168,10 @@ print(response_content)
 submission_id = response_content.split()[4][:-1]
 print(base_url + "/submissions/" + submission_id)
 # Soup it up TODO improve
+# if confirm_submission:
+#     confirmation = input("Get results? (Y/y) ")
+#     if confirmation not in "Yy":
+#         exit()
 
 while True:
     try:
@@ -222,4 +226,3 @@ while True:
         exit(1)
     sys.stdout.write('\r')
     time.sleep(1)
-exit()

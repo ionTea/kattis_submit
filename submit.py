@@ -1,353 +1,225 @@
 #!/usr/bin/env python
-import ConfigParser
-import optparse
+import argparse
 import os
 import sys
-import itertools
-import mimetools
-import mimetypes
-import urllib
-import urllib2
-import traceback
-from lxml import etree
+from bs4 import BeautifulSoup
+import requests
 import time
-from os.path import expanduser
-from colorama import init, deinit
 
-_VERSION = 'Version: $Version: $'
+# Python 2/3 compatibility
+if sys.version_info[0] >= 3:
+    import configparser
+else:
+    # Python 2, import modules with Python 3 names
+    import ConfigParser as configparser
 
-_KATTISRC_LOCATION = '/usr/local/etc/'
-_KATTISRC_FILE = '.kattisrc'
+
+_HEADERS = {'User-Agent': 'kattis-cli-submit'}
+_DEFAULT_CONFIG = '/usr/local/etc/.kattisrc'
+_LANGUAGE_GUESS = {
+    '.java': 'Java',
+    '.c': 'C',
+    '.cpp': 'C++',
+    '.h': 'C++',
+    '.cc': 'C++',
+    '.cxx': 'C++',
+    '.c++': 'C++',
+    '.py': 'Python',
+    '.cs': 'C#',
+    '.c#': 'C#',
+    '.go': 'Go',
+    '.m': 'Objective-C',
+    '.hs': 'Haskell',
+    '.pl': 'Prolog',
+    '.js': 'JavaScript',
+    '.php': 'PHP',
+    '.kt': 'Kotlin',
+    '.sc': 'Scala',
+    '.rb': 'Ruby'
+}
+_GUESS_MAINCLASS = {'Java', 'Python'}
 _PASSED_TEST_SIGN = u"\u2713"
 
-if os.name == "nt":
-	_PASSED_TEST_SIGN = "P"
 
-_LANGUAGE_GUESS = { '.java' : 'Java', '.c' : 'C', '.cpp' : 'C++', '.h' : 'C++', '.cc' : 'C++', '.cxx' : 'C++', '.c++' : 'C++', '.py' : 'Python', '.cs': 'C#', '.c#': 'C#', '.go': 'Go', '.m' : 'Objective-C', '.hs' : 'Haskell', '.pl' : 'Prolog', '.js': 'JavaScript', '.php': 'PHP', '.rb' : 'Ruby' }
-_GUESS_MAINCLASS  = set(['Java', 'Python'])
+parser = argparse.ArgumentParser(description='Submit a solution to Kattis')
 
-"""MultiPartForm based on code from
-http://blog.doughellmann.com/2009/07/pymotw-urllib2-library-for-opening-urls.html
+parser.add_argument('-f', '--force', action='store_true',
+               help='Confirm before submission')
+parser.add_argument('-p', '--problem',
+               help='Which problem to submit to.')
+parser.add_argument('-m', '--mainclass',
+               help='Sets mainclass.')
+parser.add_argument('-l', '--language',
+               help='Sets language.')
+parser.add_argument('files', nargs='+')
 
-This since the default libraries still lack support for posting
-multipart/form-data (which is required to post files in HTTP).
-http://bugs.python.org/issue3244
-"""
-class MultiPartForm(object):
-	"""Accumulate the data to be used when posting a form."""
+args = parser.parse_args()
+files = args.files
 
-	def __init__(self):
-		self.form_fields = []
-		self.files = []
-		self.boundary = mimetools.choose_boundary()
-		return
+cfg = configparser.ConfigParser()
 
-	def get_content_type(self):
-		return 'multipart/form-data; boundary=%s' % self.boundary
+if os.path.exists(_DEFAULT_CONFIG):
+    cfg.read(_DEFAULT_CONFIG)
 
-	def escape_field_name(self, name):
-		"""Should escape a field name escaped following RFC 2047 if needed.
-		Skipped for now as we only call it with hard coded constants.
-		"""
-		return name
+if not cfg.read([os.path.join(os.getenv('HOME'), '.kattisrc'),
+                 os.path.join(os.path.dirname(sys.argv[0]), '.kattisrc')]):
+    # TODO  move shit
+    print('''\
+            I failed to read in a config file from your home directory or from the
+            same directory as this script. To download a .kattisrc file please visit
+            https://<kattis>/download/kattisrc
 
-	def add_field(self, name, value):
-		"""Add a simple field to the form data."""
-		if(value==None):
-			#Assume the field is empty
-			value=""
-		#ensure value is a string
-		value=str(value)
-		self.form_fields.append((name, value))
-		return
+            The file should look something like this:
+            [user]
+            username: yourusername
+            token: *********
 
-	def add_file(self, fieldname, filename, fileHandle, mimetype=None):
-		"""Add a file to be uploaded."""
-		body = fileHandle.read()
-		if mimetype is None:
-			mimetype = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
-		self.files.append((fieldname, filename, mimetype, body))
-		return
+            [kattis]
+            loginurl: https://<kattis>/login
+            submissionurl: https://<kattis>/submit''')
+    sys.exit(1)
 
-	def add_to_request(self, request):
-		body = str(self)
-		request.add_header('Content-type', self.get_content_type())
-		request.add_header('Content-length', len(body))
-		request.add_data(body)
+# Get config options from .kattisrc
+username = password = token = submission_url = login_url = base_url = None
+try:
+    username = cfg.get('user', 'username')
+    token = cfg.get('user', 'token')
+    submit_url = cfg.get('kattis', 'submissionurl')
+    login_url = cfg.get('kattis', 'loginurl')
+    base_url = login_url[0:login_url.rfind('/')]
+except configparser.NoOptionError:
+    # TODO
+    print('Your kattisrc seems to be not compatible with life itself.')
+    sys.exit(1)
 
-	def __str__(self):
-		"""Return a string representing the form data, including attached files."""
-		# Build a list of lists, each containing "lines" of the
-		# request.  Each part is separated by a boundary string.
-		# Once the list is built, return a string where each
-		# line is separated by '\r\n'.
-		parts = []
-		part_boundary = '--' + self.boundary
-
-		# Add the form fields
-		parts.extend(
-			[ part_boundary,
-			  'Content-Disposition: form-data; name="%s"' % self.escape_field_name(name),
-			  '',
-			  value,
-			]
-			for name, value in self.form_fields
-			)
-
-		# Add the files to upload
-		parts.extend(
-			[ part_boundary,
-			  'Content-Disposition: file; name="%s"; filename="%s"' % \
-				  (self.escape_field_name(field_name), filename),
-				  # FIXME: filename should be escaped using RFC 2231
-			  'Content-Type: %s' % content_type,
-			  '',
-			  body,
-			]
-			for field_name, filename, content_type, body in self.files
-			)
-
-		# Flatten the list and add closing boundary marker,
-		# then return CR+LF separated data
-		flattened = list(itertools.chain(*parts))
-		flattened.append('--' + self.boundary + '--')
-		flattened.append('')
-		return '\r\n'.join(flattened)
+login_args = {
+    'user': username,
+    'script': 'true',
+    'token': token
+    }
 
 
-_RC_HELP = \
-'''Failed to read config file from your home directory or from the script directory.
-Please go to your Kattis user page to download a .kattisrc file.
-
-The file should look something like:
-[user]
-username: yourusername
-token: *********
-
-[kattis]
-loginurl: https://<kattis>/login
-submissionurl: https://<kattis>/submit
-'''
+login_reply = None
+try:
+    login_reply = requests.post(login_url, data=login_args, headers=_HEADERS)
+except Exception as e:
+    print('Connection to {0} failed.'.format(login_url))
+    sys.exit(1)
 
 
-def get_url(cfg, option, default):
-	if cfg.has_option('kattis', option):
-		return cfg.get('kattis', option)
-	else:
-		return 'https://%s/%s' % (cfg.get('kattis', 'hostname'), default)
+# Guess language and problem
 
-def confirm_or_die(problem, language, files, mainclass, tag):
-	print 'Problem:', problem
-	print 'Language:', language
-	print 'Files:', ', '.join(files)
-	if mainclass:
-		print 'Mainclass:', mainclass
-	if tag:
-		print 'Tag:', tag
-	print 'Submit (y/N)?'
-	if sys.stdin.readline().upper()[:-1] != 'Y':
-		print 'Cancelling'
-		sys.exit(1)
+problem, ext = os.path.splitext(os.path.basename(args.files[0]))
+language = _LANGUAGE_GUESS.get(ext, None)
+mainclass = problem if language in _GUESS_MAINCLASS else None
 
-def scrape_and_print(htmlDoc):
-	doc = etree.HTML(htmlDoc)
-	testresults = doc.xpath('//*[@id="judge_table"]/tbody/tr[2]/td/div')
-	testcomplete = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[4]/span')
-	passedTests = 0
-	sys.stdout.write("[")
-	for test in testresults[0]:
-		if (test.get("class") == "accepted"):
-			passedTests += 1
-			sys.stdout.write("\033[92m")
-			sys.stdout.write(_PASSED_TEST_SIGN + " ")
-		elif (test.get("class") == "rejected"):
-			sys.stdout.write("\033[91m")
-			sys.stdout.write("X ")
-		else:
-			sys.stdout.write("\033[39m")
-			sys.stdout.write("O ")
-	sys.stdout.write(" | " + str(passedTests) + "/" + str(len(testresults[0])))
-	sys.stdout.write("\033[39m] " + str(testcomplete[0].xpath("text()")[0]))
-	# sys.stdout.write("\n")
-	sys.stdout.flush()
+if args.problem:
+    problem = args.problem
+if args.language:
+    language = args.language
+elif language == "Python":
+    python_version = str(sys.version_info[0])
+    language = "Python " + python_version
 
-	if (testcomplete[0].get("class") == "accepted" or testcomplete[0].get("class") == "rejected"):
-		if (testcomplete[0].get("class") == "rejected"):
-			sys.stdout.write("\033[91m")
-			print ""
-			print  "Oh no! Your submission resulted in a " + str(testcomplete[0].xpath("text()")[0])
-			sys.stdout.write("\033[39m")
-			print ""
-			compileroutput = doc.xpath('//*[@id="wrapper"]/div/div[2]/section/div[1]/pre')
-			if compileroutput:
-				print "Compiler output: "
-				print compileroutput[0].text
-				print ""
-		else:
-			tottime = doc.xpath('//*[@id="judge_table"]/tbody/tr[1]/td[5]')
-			print " Time: " + tottime[0].text
-		return True
-	return False
+if language is None:
+    print("I failed to guess the language and you didn't provide one for me. I'm going back to bed")
+    exit(1)
 
+confirm_submission = not args.force
 
+# Confirm or die
+if confirm_submission:
+    print('Problem:', problem)
+    print('Language:', language)
+    print('Files:', ', '.join(files))
 
+    confirmation = input("Submit problem? (Y/y) ")
 
+    if confirmation not in "yY":
+        exit()
 
-def main():
-	if os.name == "nt":
-		init(convert=True)
-	opt = optparse.OptionParser()
-	opt.add_option('-p', '--problem', dest='problem', metavar='PROBLEM', help='Submit to problem PROBLEM. Overrides default guess (first part of first filename)', default=None)
-	opt.add_option('-m', '--mainclass', dest='mainclass', metavar='CLASS', help='Sets mainclass to CLASS. Overrides default guess (first part of first filename)', default=None)
-	opt.add_option('-l', '--language', dest='language', metavar='LANGUAGE', help='Sets language to LANGUAGE. Overrides default guess (based on suffix of first filename)', default=None)
-	opt.add_option('-t', '--tag', dest='tag', metavar='TAG', help=optparse.SUPPRESS_HELP, default="")
-	opt.add_option('-f', '--force', dest='force', help='Force, no confirmation prompt before submission', action="store_true", default=False)
-	opt.add_option('-d', '--debug', dest='debug', help='Print debug info while running', action="store_true", default=False)
+# Submit
 
-	opts, args = opt.parse_args()
+data = {'submit': 'true',
+        'submit_ctr': 2,
+        'language': language,
+        'mainclass': mainclass,
+        'problem': problem,
+        'script': 'true'}
 
-	if len(args) == 0:
-		opt.print_help()
-		sys.exit(1)
+sub_files = []
+for f in files:
+    with open(f) as sub_file:
+        sub_files.append(('sub_file[]',
+                          (os.path.basename(f),
+                           sub_file.read(),
+                           'application/octet-stream')))
+response = None
+try:
+    response = requests.post(submit_url, data=data,
+        files=sub_files, cookies=login_reply.cookies,
+        headers=_HEADERS)
+except Exception as e:
+    print('Connection to {0} failed.'.format(submit_url))
+    sys.exit(1)
 
-	problem, ext = os.path.splitext(os.path.basename(args[0]))
-	language = _LANGUAGE_GUESS.get(ext, None)
-	mainclass = problem if language in _GUESS_MAINCLASS else None
-	tag=opts.tag
-	debug=opts.debug
+response_content = response.content.decode('utf-8').replace('<br />', '\n')
+print(response_content)
+submission_id = response_content.split()[4][:-1]
+print(base_url + "/submissions/" + submission_id)
+# Soup it up TODO improve
 
-	if opts.problem:
-		problem = opts.problem
-	if opts.mainclass is not None:
-		mainclass = opts.mainclass
-	if opts.language:
-		language = opts.language
+while True:
+    try:
+        login_reply = requests.post(login_url, data=login_args, headers=_HEADERS)
+        response = requests.get(base_url + "/submissions/" + submission_id, cookies=login_reply.cookies,
+            headers=_HEADERS)
+    except Exception as e:
+        print('Connection to {0} failed.'.format(submit_url))
+        sys.exit(1)
+    content = response.content.decode('utf-8')
+    soup = BeautifulSoup(content, 'html.parser')
 
-	if language == None:
-		print 'No language specified, and I failed to guess language from filename extension "%s"' % (ext)
-		sys.exit(1)
+    test_cases = list(soup.select('.testcases')[0].children)
+    submission_status = soup.select('.status')[0]
+    passed_tests = 0
 
-	seen = set()
-	files = []
-	for a in args:
-		if a not in seen:
-			files.append(a)
-		seen.add(a)
+    sys.stdout.write("[")
 
-	submit(problem, language, files, opts.force, mainclass, tag, debug=debug)
-	if os.name == "nt":
-		deinit()
+    for case in test_cases:
+        classes = case.attrs.get('class', [])
+        if "accepted" in classes:
+            passed_tests += 1
+            sys.stdout.write("\033[92m")
+            sys.stdout.write(_PASSED_TEST_SIGN + " ")
+        elif "rejected" in classes:
+            sys.stdout.write("\033[91m")
+            sys.stdout.write("X ")
+        else:
+            sys.stdout.write("\033[39m")
+            sys.stdout.write("O ")
 
+    sys.stdout.write(" | " + str(passed_tests) + "/" + str(len(test_cases)))
+    sys.stdout.write("\033[39m] " + str(submission_status.text))
+    sys.stdout.flush()
 
-
-def submit(problem, language, files, force=True, mainclass=None, tag=None, username=None, password=None, token=None, debug=False):
-	if(debug):
-		print problem, language, files, force, mainclass, tag, username, password, token, debug
-	cfg = ConfigParser.ConfigParser()
-
-	if not cfg.read([os.path.join(os.path.dirname(sys.argv[0]), _KATTISRC_FILE),
-					os.path.join(_KATTISRC_LOCATION, _KATTISRC_FILE),
-					os.path.join(expanduser('~'), _KATTISRC_FILE)]):
-		print _RC_HELP
-		sys.exit(1)
-
-	if(username==None):
-		username = cfg.get('user', 'username')
-	if(password==None):
-		try:
-			password = cfg.get('user', 'password')
-		except:
-			pass
-	if(token==None):
-		try:
-			token = cfg.get('user', 'token')
-		except:
-			pass
-	if(mainclass==None):
-		mainclass=""
-	if(tag==None):
-		tag=""
-
-	if password == None and token == None:
-		print "Your .kattisrc file appears corrupted. It must provide a token (or a KATTIS password).\nPlease download a new .kattisrc file\n"
-		sys.exit(1)
-
-	opener = urllib2.build_opener(urllib2.HTTPCookieProcessor())
-	urllib2.install_opener(opener)
-	loginurl = get_url(cfg, 'loginurl', 'login')
-	loginargs = { 'user' : username, 'script' : 'true' }
-	if password:
-		loginargs['password'] = password
-	if token:
-		loginargs['token'] = token
-	try:
-		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
-	except urllib2.URLError, e:
-		if hasattr(e, 'reason'):
-			print 'Failed to connect to Kattis server.'
-			print 'Reason: ', e.reason
-		elif hasattr(e, 'code'):
-			print 'Login failed.'
-			if(e.code==403):
-				print "Incorrect Username/Password"
-			elif(e.code==404):
-				print "Incorrect login URL (404)"
-			else:
-				print 'Error code: ', e.code
-		sys.exit(1)
-	if not force:
-		confirm_or_die(problem, language, files, mainclass, tag)
-
-	submission_url = get_url(cfg, 'submissionurl', 'judge_upload')
-	form = MultiPartForm()
-	form.add_field('submit', 'true')
-	form.add_field('submit_ctr', '2')
-	form.add_field('language', language)
-	form.add_field('mainclass', mainclass)
-	form.add_field('problem', problem)
-	form.add_field('tag', tag)
-	form.add_field('script', 'true')
-
-	try:
-		if(len(files)>0):
-			for file in files:
-				form.add_file('sub_file[]', os.path.basename(file), open(file))
-	except IOError, e:
-		sys.stdout.write("File not found.\n")
-		sys.exit(1)
-
-	request = urllib2.Request(submission_url)
-	form.add_to_request(request)
-	try:
-		success =  urllib2.urlopen(request).read().replace("<br />", "\n")
-		print success
-		submissionId = success.split()[4][:-1]
-
-		urllib2.urlopen(loginurl, urllib.urlencode(loginargs))
-		print "Running tests..."
-		result_url = "https://kth.kattis.com/submissions/" + submissionId
-		done = False
-		while (not done):
-			result_html = urllib2.urlopen(result_url)
-			done = scrape_and_print(result_html.read())
-			sys.stdout.write("\r")
-			time.sleep(1)
-		print "For more info visit " + result_url
-	except IndexError, e:
-		sys.stdout.write("")
-	except urllib2.URLError, e:
-		if hasattr(e, 'reason'):
-			print 'Failed to connect to Kattis server.'
-			print 'Reason: ', e.reason
-		elif hasattr(e, 'code'):
-			print 'Login failed.'
-			if(e.code==403):
-				print "Access denied."
-			elif(e.code==404):
-				print "Incorrect submit URL (404)"
-			else:
-				print 'Error code: ', e.code
-		sys.exit(1)
-
-if __name__ == '__main__':
-    main()
+    status = submission_status.attrs.get('class', [])
+    if 'accepted' in status or 'rejected' in status:
+        if 'rejected' in status:
+            sys.stdout.write("\033[91m")
+            print()
+            print("Oh no! Your submission resulted in a", str(submission_status.text))
+            sys.stdout.write("\033[39m")
+            print()
+            compileroutput = soup.select('.extrainfo')
+            if compileroutput:
+                print("Compiler output: ")
+                print(compileroutput[0].find('pre').text)
+                print("")
+        else:
+            tottime = soup.select('.runtime.middle')[0].text
+            print(" Time: " + tottime)
+        exit(1)
+    sys.stdout.write('\r')
+    time.sleep(1)
+exit()

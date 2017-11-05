@@ -232,3 +232,6 @@ while True:
     time.sleep(1)
 
 deinit()
+
+if __name__ == "__main__":
+    pass

@@ -169,7 +169,12 @@ except Exception as e:
 
 response_content = response.content.decode('utf-8').replace('<br />', '\n')
 print(response_content)
-submission_id = response_content.split()[4][:-1]
+
+try:
+    submission_id = response_content.split()[4][:-1]
+except Exception as e:
+    sys.exit(1)
+
 print(base_url + '/submissions/' + submission_id)
 # Soup it up TODO improve
 # if confirm_submission:

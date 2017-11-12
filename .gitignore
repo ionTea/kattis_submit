@@ -1,2 +1,3 @@
 .kattisrc
 __pycache__/
+*.swp
